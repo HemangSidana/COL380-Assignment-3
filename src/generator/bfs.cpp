@@ -22,14 +22,11 @@ int main(){
     int *above= (int*) malloc(64*sizeof(int));
     for(int i=0; i<64; i++) above[i]=0;
     for(int i=0; i<vertices; i++) local_graph[i]=0;
+    int receive=0;
     queue<int> q;
     if(rank==0){
         local_graph[63]=1;
         q.push(63);
-    }
-    if(rank==num_proc-1){
-        local_graph[15*64]=1;
-        q.push(15*64);
     }
     while(true){
         if(rank>0){
@@ -37,11 +34,15 @@ int main(){
             MPI_Recv(&recvSize, 1, MPI_INT, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             int* recvArray = new int[recvSize];
             MPI_Recv(recvArray, recvSize, MPI_INT, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            for (int i = 0; i < recvSize; ++i) {
-                int val= recvArray[i];
-                q.push(val);
+            if(recvSize>0 && receive==0){
+                // for (int i = 0; i < recvSize; i++) {
+                int val= recvArray[0];
+                q.push(val+64);
+                local_graph[val+64]=1;
                 local_graph[val]=1;
                 above[val]=1;
+                // }
+                receive=1;
             }
             delete[] recvArray;
         }
@@ -58,8 +59,8 @@ int main(){
             }
             if(x>=64){
                 int y= x-64;
-                int count= (y>=64 ? local_graph[y-64] : 0) + ((y%64>0) ? local_graph[y-1] : 0) + ((y%64<63) ? local_graph[y+1] : 0) + ((y<64) ? above[y] : 0);
-                if(count==0 && !local_graph[y]){ q.push(y); local_graph[y]=1;}
+                int count= (y>=64 ? local_graph[y-64] : above[y]) + ((y%64>0) ? local_graph[y-1] : 0) + ((y%64<63) ? local_graph[y+1] : 0) + ((y<64) ? above[y] : 0);
+                if(count==0 && !local_graph[y] && y>=64){ q.push(y); local_graph[y]=1;}
             }
             if((x%64)>0){
                 int y= x-1;
@@ -74,7 +75,7 @@ int main(){
             if(x+64<vertices){
                 int y= x+64;
                 int count= ((y+64<vertices) ? local_graph[y+64] : 0) + ((y%64>0) ? local_graph[y-1] : 0) + ((y%64<63) ? local_graph[y+1] : 0);
-                if(count==0 && !local_graph[y]){ 
+                if(count==0 && !local_graph[y] && (rank!=3 || y+64<vertices)){ 
                     q.push(y); 
                     local_graph[y]=1;
                     if(y+64>=vertices){
@@ -97,6 +98,16 @@ int main(){
         MPI_Allreduce(MPI_IN_PLACE, &sz, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
         if(sz==0) break;
     }
+    if(rank==3){
+        int i;
+        for(i=0; i<64; i++){
+            local_graph[i+15*64]=1;
+            if(local_graph[i+14*64]==1){
+                break;
+            }
+        }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
     if(rank==0){
         graph= (int*) malloc(num_vertices*sizeof(int));
     }

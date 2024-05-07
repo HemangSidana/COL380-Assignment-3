@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <random>
 #include <set>
+#include <fstream>
 using namespace std;
 
 #define num_vertices 64*64
@@ -27,35 +28,23 @@ int main(){
     int *parent= (int*) malloc(vertices*sizeof(int));
     for(int i=0; i<vertices; i++) parent[i]=-1;
     vector<int> v;
-    vector<int> cur;
     std::random_device rd;
     std::mt19937 gen(rd());
-    if(rank==0){
-        parent[63]=63;
-        local_graph[63]=1;
-        for(int i=0; i<vertices; i++){
-            if(i==63) continue;
-            cur.push_back(i);
-            if(i%64==63){
-                shuffle(cur.begin(), cur.end(), gen);
-                for(auto val: cur) v.push_back(val);
-                cur.clear();
-            }
+    for(int i=0; i<vertices; i++){
+        if(i%64==63){
+            parent[i]=63;
+            local_graph[i]=1;
+        }
+        if(i+64>=vertices) continue;
+        v.push_back(i);
+    }
+    if(rank==3){
+        for(int i=0; i<64; i++){
+            local_graph[15*64+i]=1;
+            parent[15*64+i]=63;
         }
     }
-    else{
-        if(rank==3){parent[15*64]=15*64; local_graph[15*64]=1;}
-        for(int i=64; i<vertices; i++){
-            if(i==15*63 && rank==3) continue;
-            cur.push_back(i);
-            if(i%64==63){
-                shuffle(cur.begin(), cur.end(), gen);
-                for(auto val: cur) v.push_back(val);
-                cur.clear();
-            }
-        }
-    }
-    
+    shuffle(v.begin(),v.end(),gen);
     
     for(int j=0; j<v.size(); j++){
         int x= v[j];
@@ -81,46 +70,26 @@ int main(){
             }
         }
     }
-    if(rank>0){
-        int* recvArray = new int[64];
-        MPI_Recv(recvArray, 64, MPI_INT, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        int found=0;
-        for(int i=0; i<64; i++){
-            if(recvArray[i] && local_graph[i+64]){
-                found=i+1; break;
-            }
-        }
-        if(found){
-            for(int i=0; i<64; i++){
-                if(recvArray[i] && (i==0 || local_graph[i-1]==0)){
-                    local_graph[i]=1;
-                }
-            }
-        }
-        else{
-            local_graph[found-1]=1;
-            for(int i=found; i<64; i++){
-                if(recvArray[i]==1) break;
-                local_graph[i]=1;
-            }
-        }
-        delete[] recvArray;
-    }
-    if(rank<3){
-        int* sendArray = new int[64];
-        for(int i=0; i<64; i++) sendArray[i]=local_graph[i+15*64];
-        MPI_Send(sendArray, 64, MPI_INT, rank + 1, 0, MPI_COMM_WORLD);
-        delete[] sendArray;
-    }
-    MPI_Barrier(MPI_COMM_WORLD);
+    // MPI_Barrier(MPI_COMM_WORLD);
     if(rank==0){
         graph= (int*) malloc(num_vertices*sizeof(int));
     }
     MPI_Gather(local_graph, vertices, MPI_INT, graph, vertices, MPI_INT, 0, MPI_COMM_WORLD);
     if(rank==0){
-        for(int i=0; i<num_vertices; i++){
-            cout<<graph[i]<<" ";
-            if(i%64==63) cout<<endl;
+        // for(int i=0; i<num_vertices; i++){
+        //     cout<<graph[i]<<" ";
+        //     if(i%64==63) cout<<endl;
+        // }
+        std::ofstream outfile("../output2.txt");
+        // Check if the file is open
+        if (outfile.is_open()) {
+            for (int i = 0; i < num_vertices; i++) {
+                outfile << graph[i] << " ";
+                if (i % 64 == 63) outfile << std::endl;
+            }
+            outfile.close();  // Close the file after writing
+        } else {
+            std::cout << "Unable to open file";
         }
     }
     MPI_Finalize();
