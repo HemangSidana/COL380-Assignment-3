@@ -3,6 +3,8 @@
 #include <queue>
 #include <vector>
 #include <random>
+#include <fstream>
+
 using namespace std;
 
 #define num_vertices 64*64
@@ -100,10 +102,21 @@ int main(){
     }
     MPI_Gather(local_graph, vertices, MPI_INT, graph, vertices, MPI_INT, 0, MPI_COMM_WORLD);
     if(rank==0){
-        for(int i=0; i<num_vertices; i++){
-            cout<<graph[i]<<" ";
-            if(i%64==63) cout<<endl;
+        std::ofstream outfile("../output.txt");
+        // Check if the file is open
+        if (outfile.is_open()) {
+            for (int i = 0; i < num_vertices; i++) {
+                outfile << graph[i] << " ";
+                if (i % 64 == 63) outfile << std::endl;
+            }
+            outfile.close();  // Close the file after writing
+        } else {
+            std::cout << "Unable to open file";
         }
+        // for(int i=0; i<num_vertices; i++){
+        //     cout<<graph[i]<<" ";
+        //     if(i%64==63) cout<<endl;
+        // }
     }
     MPI_Finalize();
 }
